@@ -77,11 +77,17 @@ type Request interface {
 		url string,
 	) (resp *Response, err error)
 
+	Context() context.Context
+
 	URL() *url.URL
 
 	Header() http.Header
 
 	Body() (io.Reader, error)
+
+	WithValues(
+		values ...any,
+	) Request
 
 	WithHeader(
 		key string,
@@ -138,8 +144,13 @@ type Request interface {
 type request struct {
 	httpReq *http.Request
 	client  *client
+	method  string
+	url     string
+	ctx     context.Context
 	header  http.Header
+	values  []any
 	query   url.Values
+	body    io.Reader
 	timeout time.Duration
 }
 
@@ -160,6 +171,15 @@ func (r *request) do(
 	)
 	defer cancel()
 
+	r.ctx = ctx
+	r.method = method
+	r.url = url
+	r.body = body
+
+	if r.values != nil {
+		url = fmt.Sprintf(url, r.values...)
+	}
+
 	req, err := http.NewRequestWithContext(
 		ctxWithTimeout,
 		method,
@@ -172,7 +192,6 @@ func (r *request) do(
 
 	req.Header = r.header
 	req.URL.RawQuery = r.query.Encode()
-
 	r.httpReq = req
 
 	res, err := r.client.httpClient.Do(req)
@@ -314,6 +333,11 @@ func (r *request) Patch(
 
 }
 
+// Context returns request context
+func (r *request) Context() context.Context {
+	return r.ctx
+}
+
 // URL returns request URL.
 func (r *request) URL() *url.URL {
 	if r.httpReq != nil {
@@ -335,7 +359,7 @@ func (r *request) Header() http.Header {
 
 // Body returns request BODY copy.
 func (r *request) Body() (io.Reader, error) {
-	if r.httpReq != nil {
+	if r.httpReq != nil && r.httpReq.GetBody != nil {
 		return r.httpReq.GetBody()
 	}
 
@@ -350,6 +374,16 @@ func (r *request) WithHeader(
 	for _, value := range values {
 		r.header.Add(key, value)
 	}
+
+	return r
+
+}
+
+// WithValues adds given values to request URL.
+func (r *request) WithValues(
+	values ...any,
+) Request {
+	r.values = values
 
 	return r
 

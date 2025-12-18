@@ -5,12 +5,13 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
-	"github.com/stretchr/testify/assert"
 	"io"
 	"net/http"
 	"net/url"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestRequest_Do(t *testing.T) {
@@ -922,6 +923,7 @@ func TestRequest_URL(t *testing.T) {
 func TestRequest_Body(t *testing.T) {
 	type want struct {
 		body io.ReadCloser
+		err  error
 	}
 
 	type depends struct {
@@ -939,6 +941,7 @@ func TestRequest_Body(t *testing.T) {
 			name: "Nil request",
 			want: want{
 				body: nil,
+				err:  ErrNoBody,
 			},
 			depends: depends{
 				httpRequest: nil,
@@ -948,10 +951,11 @@ func TestRequest_Body(t *testing.T) {
 			name: "Nil body",
 			want: want{
 				body: nil,
+				err:  ErrNoBody,
 			},
 			depends: depends{
 				httpRequest: &http.Request{
-					URL: nil,
+					Body: nil,
 				},
 			},
 		},
@@ -962,7 +966,9 @@ func TestRequest_Body(t *testing.T) {
 			},
 			depends: depends{
 				httpRequest: &http.Request{
-					Body: io.NopCloser(bytes.NewBuffer([]byte(`Sample`))),
+					GetBody: func() (io.ReadCloser, error) {
+						return io.NopCloser(bytes.NewBuffer([]byte(`Sample`))), nil
+					},
 				},
 			},
 		},
@@ -974,7 +980,9 @@ func TestRequest_Body(t *testing.T) {
 				httpReq: tc.depends.httpRequest,
 			}
 
-			assert.Equal(t, tc.want.body, req.Body())
+			body, err := req.Body()
+			assert.Equal(t, tc.want.body, body)
+			assert.ErrorIs(t, err, tc.want.err)
 
 		})
 	}
@@ -1921,7 +1929,7 @@ func TestRequest_WithJWTAuth(t *testing.T) {
 func TestRequest_WithQuery(t *testing.T) {
 	type args struct {
 		key    string
-		values []any
+		values []string
 	}
 
 	type want struct {
@@ -1944,12 +1952,12 @@ func TestRequest_WithQuery(t *testing.T) {
 			name: "Without collision",
 			args: args{
 				key:    "key",
-				values: []any{"value 1", "value 2", "value 3", 4, true, false},
+				values: []string{"value 1", "value 2", "value 3"},
 			},
 			want: want{
 				req: &request{
 					query: url.Values{
-						"key": {"value 1", "value 2", "value 3", "4", "true", "false"},
+						"key": {"value 1", "value 2", "value 3"},
 					},
 				},
 			},
@@ -1961,12 +1969,12 @@ func TestRequest_WithQuery(t *testing.T) {
 			name: "With collision",
 			args: args{
 				key:    "key",
-				values: []any{"value 4", "value 5", "value 6", 7, true, false},
+				values: []string{"value 4", "value 5", "value 6"},
 			},
 			want: want{
 				req: &request{
 					query: url.Values{
-						"key": {"value 1", "value 2", "value 3", "value 4", "value 5", "value 6", "7", "true", "false"},
+						"key": {"value 1", "value 2", "value 3", "value 4", "value 5", "value 6"},
 					},
 				},
 			},

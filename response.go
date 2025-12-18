@@ -11,8 +11,8 @@ type Response struct {
 	*http.Response
 }
 
-// IsSuccess checks response status code for success.
-func (res *Response) IsSuccess() bool {
+// Success checks response status code for success.
+func (res *Response) Success() bool {
 	return res.StatusCode >= 200 && res.StatusCode < 300
 }
 
